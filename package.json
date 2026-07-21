@@ -1,0 +1,38 @@
+{
+  "name": "goei-sync",
+  "version": "0.1.0",
+  "description": "Push your local Claude Code usage (via ccusage) to Goei, the hosted team cost dashboard. Zero API keys, daily rollups only, nothing in your request path.",
+  "bin": {
+    "goei-sync": "bin/goei-sync.js"
+  },
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "ccusage",
+    "cost-tracking",
+    "team",
+    "multi-machine",
+    "dashboard",
+    "claude-max",
+    "usage-tracking",
+    "anthropic",
+    "cost-dashboard",
+    "goei"
+  ],
+  "license": "MIT",
+  "author": "RoninForge",
+  "homepage": "https://roninforge.org/goei",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RoninForge/goei-sync.git"
+  }
+}
