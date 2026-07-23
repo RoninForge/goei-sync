@@ -1,55 +1,76 @@
 # goei-sync
 
-Push your local Claude Code usage to [Goei](https://roninforge.org/goei), the hosted team cost dashboard, with one command. Zero API keys, daily rollups only, nothing in your request path.
+See your Claude Code spend broken down by git branch, on your machine, with no account. Then optionally sync it to [Goei](https://roninforge.org/goei), the hosted dashboard that rolls spend up across your whole team. Zero API keys, nothing in your request path.
 
 ```bash
-npx goei-sync --token goei_dt_your_device_token --days 30
+npx goei-sync
 ```
 
-> `npx goei-sync` reads your local Claude Code usage through ccusage and pushes daily token rollups to Goei, the hosted dashboard that dedupes across every machine and teammate. Goei prices the tokens and shows cost per developer and per model. For per-project and per-git-branch attribution plus hard spend caps, run the open-source budgetclaw CLI instead. No API keys, no prompts, nothing in the request path.
+That reads the session logs Claude Code already writes under `~/.claude/projects`, prices the tokens at published list rates, and prints your spend by git branch and by model. No account, no API key, nothing leaves your machine.
 
-## What it does
+```
+Claude Code local usage by git branch  (2026-07-10 to 2026-07-23)
+Local usage value at list prices. Not your provider bill.
 
-goei-sync runs [ccusage](https://github.com/ryoppippi/ccusage) (Claude Code's local usage reader), takes the per-day, per-model token counts it produces, and sends them to Goei with a device token you can revoke. Goei prices the tokens point-in-time on its side, so goei-sync ships no pricing table and computes no dollars itself. The token counts match ccusage exactly; the dollar figures on your dashboard are Goei's own repricing.
+Top branch: web/main  $347.70 (27% of $1265.77 across 54 branches)
 
-One caveat on the dollars: ccusage reports a single combined cache-creation figure with no 5-minute vs 1-hour TTL split, so Goei values all cache writes at the 5-minute rate. If your sessions used 1-hour caching, that portion is priced slightly low. budgetclaw reads the raw session logs and reports the exact split, so use it when you need cache pricing to be exact.
+PROJECT   BRANCH              TOKENS       USD
+web       main           458,244,888   $347.70
+web       fix/login       45,402,797    $26.52
+api       main            33,271,226    $23.78
+TOTAL                    536,918,911   $398.00
 
-It reads only what Claude Code already writes to local disk. It never sees prompts, responses, or API keys, and it never sits in your request path.
+By model:
+  opus-4-8   500,000,000   $360.00
+  sonnet-5    36,918,911    $38.00
+```
 
-## Get a token
+These are local usage values at published list prices, not a provider bill: a real invoice reflects negotiated rates, plan inclusions, and credits this cannot see. Add `--json` for machine-readable output.
 
-Sign in at [goei.roninforge.org](https://goei.roninforge.org) with a magic link, then create a device token under Settings then Device Tokens. Pass it with `--token`, or set `GOEI_DEVICE_TOKEN`.
+## Roll it up across your team
+
+One machine is one machine. To combine every developer and every machine into one rollup, and to re-price 12 months of history at the rates that were live then, sync to Goei:
+
+```bash
+npx goei-sync --token goei_dt_your_device_token
+```
+
+Sign in at [goei.roninforge.org](https://goei.roninforge.org) with a magic link, create a device token under Settings then Device Tokens, and pass it with `--token` (or set `GOEI_DEVICE_TOKEN` and run `npx goei-sync sync`). Goei prices the tokens on its side and dedupes across your machines. It is free for a single developer.
+
+## What each command reads
+
+- `npx goei-sync` (report) reads the raw `~/.claude/projects/*.jsonl` logs directly, so it can attribute every message to its git branch and price the exact 5-minute vs 1-hour cache split. It prices locally with the open [ai-price-index](https://www.npmjs.com/package/ai-price-index) dataset.
+- `npx goei-sync --token ...` (sync) reads your usage through [ccusage](https://github.com/ryoppippi/ccusage) and sends daily, per-model token counts to Goei, which prices them. ccusage reports a single combined cache-creation figure, so synced dollars value cache writes at the 5-minute rate; the local report above is exact.
+
+Either way, goei-sync reads only what Claude Code already wrote to disk. It never sees prompts, responses, or API keys.
 
 ## Options
 
 ```
---token <t>       Goei device token (or set GOEI_DEVICE_TOKEN)
---days <n>        sync the last n days (default: all history ccusage has)
---since <date>    sync from YYYY-MM-DD forward (overrides --days)
---machine <id>    machine label for dedupe (default: this host's name)
+--token <t>       Goei device token; routes to sync (env: GOEI_DEVICE_TOKEN)
+--days <n>        limit to the last n days
+--since <date>    limit to YYYY-MM-DD forward (overrides --days)
+--json            print the report as JSON instead of a table (report only)
+--machine <id>    machine label for dedupe on sync (default: this host's name)
 --endpoint <url>  ingest endpoint (default: https://goei.roninforge.org/api/ingest)
---show-payload    print the exact JSON that would be sent, then exit (no token needed)
---dry-run         run ccusage and summarize, but send nothing (no token needed)
+--show-payload    print the exact JSON that sync would send, then exit
+--dry-run         run the sync summary but send nothing
 -h, --help        show this help
 ```
 
-Run `npx goei-sync --show-payload` to read the exact request body before you ever send a token. Every field it contains is a token count, a date, or a model name. There are no prompts and no keys in it.
-
-The `--machine` label defaults to your hostname and is shown to everyone on your team's dashboard (it is how Goei dedupes across your machines). Pass `--machine <id>` if you would rather not share your hostname.
+Run `npx goei-sync sync --show-payload` to read the exact request body before you ever send a token. Every field it contains is a token count, a date, or a model name. There are no prompts and no keys in it.
 
 ## goei-sync vs budgetclaw
 
-Both feed the same Goei dashboard from the same local logs, with no API key. Run one of the two on a given machine, not both: goei-sync attributes spend by day and model, while [budgetclaw](https://github.com/RoninForge/budgetclaw) also attributes it by project and git branch, so a day synced by both tools would be counted twice on that machine.
-
-Use goei-sync for a quick, dependency-free push. Use budgetclaw when you want always-on background sync, per-project and per-git-branch attribution, and hard spend caps that can stop a runaway agent.
+Both feed the same Goei dashboard from the same local logs, with no API key. On a machine that syncs, run one of the two, not both: a day synced by both would be counted twice. [budgetclaw](https://github.com/RoninForge/budgetclaw) adds always-on background sync with per-project and per-git-branch attribution to Goei, plus hard spend caps that can stop a runaway agent. Use goei-sync for a quick local look and a dependency-free push; use budgetclaw when you want continuous tracking and enforcement.
 
 ## Not a proxy
 
-goei-sync is a reporter, not a proxy. It does not sit between your editor and any AI provider, and it touches no API traffic, prompts, responses, or keys. It reads the usage rollups Claude Code already wrote to disk and forwards daily token counts to a dashboard you control.
+goei-sync is a reporter, not a proxy. It does not sit between your editor and any AI provider, and it touches no API traffic, prompts, responses, or keys. It reads the usage Claude Code already wrote to disk.
 
 ## Requirements
 
-Node 18 or newer. ccusage is used if it is on your PATH; otherwise goei-sync pulls ccusage's v20 line with npx on demand.
+Node 18 or newer.
 
 ## License
 

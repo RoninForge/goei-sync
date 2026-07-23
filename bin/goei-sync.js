@@ -5,45 +5,69 @@ const os = require('node:os');
 const { runCcusage } = require('../lib/ccusage');
 const { toSpendRecords, buildPayloads, totalTokens } = require('../lib/payload');
 const { DEFAULT_ENDPOINT, validToken, push } = require('../lib/ingest');
+const { scan } = require('../lib/scan');
+const { buildReport } = require('../lib/report');
 
-const HELP = `goei-sync - push local Claude Code usage to Goei
+const HELP = `goei-sync - see and sync your Claude Code costs
 
 Usage:
-  npx goei-sync --token goei_dt_xxxxxxxx [--days 30]
+  npx goei-sync                       show local spend by git branch (no account)
+  npx goei-sync --token goei_dt_xxx   sync daily rollups to your Goei dashboard
 
-Reads your local Claude Code usage through ccusage and sends daily token
-rollups to Goei, which prices them. Zero API keys, no prompt content,
-nothing in your request path.
+With no arguments, goei-sync prices the session logs Claude Code already writes
+and prints your spend broken down by git branch, entirely on your machine: no
+account, no API key, nothing in your request path. Add a token to also roll it
+up across your machines and teammates in Goei, which keeps 12-month history
+re-priced at the rates that were live then.
+
+Commands:
+  report            (default) print local spend by git branch; no token needed
+  sync              push daily rollups to Goei; uses --token or GOEI_DEVICE_TOKEN
 
 Options:
-  --token <t>       Goei device token (or set GOEI_DEVICE_TOKEN)
-  --days <n>        sync the last n days (default: all history ccusage has)
-  --since <date>    sync from YYYY-MM-DD forward (overrides --days)
-  --machine <id>    machine label for dedupe (default: this host's name)
+  --token <t>       Goei device token; routes to sync (env: GOEI_DEVICE_TOKEN,
+                    read by the sync command)
+  --days <n>        limit to the last n days
+  --since <date>    limit to YYYY-MM-DD forward (overrides --days)
+  --json            print the report as JSON instead of a table (report only)
+  --machine <id>    machine label for dedupe on sync (default: this host's name)
   --endpoint <url>  ingest endpoint (default: ${DEFAULT_ENDPOINT})
-  --show-payload    print the exact JSON that would be sent, then exit (no token needed)
-  --dry-run         run ccusage and summarize, but send nothing (no token needed)
+  --show-payload    print the exact JSON that sync would send, then exit
+  --dry-run         run the sync summary but send nothing
   -h, --help        show this help
 
-Get a device token at https://goei.roninforge.org (Settings -> Device Tokens).
-For always-on sync plus per-project and per-git-branch attribution and hard
-spend caps, install budgetclaw: https://github.com/RoninForge/budgetclaw
+Local numbers are usage value at list prices, not a provider bill. Get a device
+token at https://goei.roninforge.org (Settings -> Device Tokens). For always-on
+tracking plus hard spend caps, install budgetclaw:
+https://github.com/RoninForge/budgetclaw
 `;
 
 function parseArgs(argv) {
+	let args = argv;
+	let command = '';
+	if (args[0] === 'report' || args[0] === 'sync') {
+		command = args[0];
+		args = args.slice(1);
+	}
 	const opts = {
+		command,
 		days: null,
 		since: null,
 		machine: os.hostname(),
 		endpoint: DEFAULT_ENDPOINT,
-		token: process.env.GOEI_DEVICE_TOKEN || '',
+		// Only an explicit --token flag routes to sync; GOEI_DEVICE_TOKEN is resolved inside
+		// runSync so it can never silently turn the bare, advertised-as-local command into a
+		// network sync.
+		token: '',
+		tokenFlag: false,
 		showPayload: false,
 		dryRun: false,
+		json: false,
 		help: false
 	};
-	for (let i = 0; i < argv.length; i++) {
-		const a = argv[i];
-		const next = () => argv[++i];
+	for (let i = 0; i < args.length; i++) {
+		const a = args[i];
+		const next = () => args[++i];
 		switch (a) {
 			case '-h':
 			case '--help':
@@ -55,8 +79,12 @@ function parseArgs(argv) {
 			case '--dry-run':
 				opts.dryRun = true;
 				break;
+			case '--json':
+				opts.json = true;
+				break;
 			case '--token':
 				opts.token = next() || '';
+				opts.tokenFlag = true;
 				break;
 			case '--machine':
 				opts.machine = next() || opts.machine;
@@ -83,6 +111,24 @@ function parseArgs(argv) {
 	return opts;
 }
 
+// Sync is chosen only by an explicit --token flag, the `sync` word, or a sync-only
+// flag; never by the environment alone, so the bare local report stays local.
+function routesToSync(opts) {
+	return (
+		opts.command === 'sync' ||
+		(opts.command !== 'report' && (opts.tokenFlag || opts.showPayload || opts.dryRun))
+	);
+}
+
+function assertFlagCompat(opts, wantsSync) {
+	if (opts.command === 'report' && (opts.tokenFlag || opts.showPayload || opts.dryRun)) {
+		throw new Error('report is local-only and takes no sync flags (--token, --show-payload, --dry-run).');
+	}
+	if (wantsSync && opts.json) {
+		throw new Error('--json applies to the local report only, not sync.');
+	}
+}
+
 function resolveSince(opts) {
 	if (opts.since) return opts.since;
 	if (opts.days) {
@@ -92,22 +138,26 @@ function resolveSince(opts) {
 	return '';
 }
 
-async function main() {
-	const opts = parseArgs(process.argv.slice(2));
-	if (opts.help) {
-		process.stdout.write(HELP);
-		return;
-	}
+// The no-account trial: read local logs, price at list rates, print spend by branch.
+async function runReport(opts) {
+	const records = await scan({ since: resolveSince(opts) });
+	const { data, text } = await buildReport(records);
+	if (opts.json) process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+	else process.stdout.write(text);
+}
 
+// The existing push path: ccusage -> daily rollups -> Goei ingest.
+async function runSync(opts) {
 	if (typeof fetch !== 'function') {
-		throw new Error('goei-sync needs Node 18 or newer (global fetch). Upgrade Node and retry.');
+		throw new Error('goei-sync sync needs Node 18 or newer (global fetch). Upgrade Node and retry.');
 	}
+	const token = opts.token || process.env.GOEI_DEVICE_TOKEN || '';
 
 	const willSend = !opts.showPayload && !opts.dryRun;
 	if (willSend) {
-		if (!validToken(opts.token)) {
+		if (!validToken(token)) {
 			throw new Error(
-				'A Goei device token is required. Pass --token goei_dt_... or set GOEI_DEVICE_TOKEN. Get one at https://goei.roninforge.org (Settings -> Device Tokens).'
+				'A Goei device token is required to sync. Pass --token goei_dt_... or set GOEI_DEVICE_TOKEN. Get one at https://goei.roninforge.org (Settings -> Device Tokens). Or run `npx goei-sync` with no token to see local spend by branch.'
 			);
 		}
 		let url;
@@ -132,9 +182,7 @@ async function main() {
 	const payloads = buildPayloads(records, opts.machine);
 
 	if (opts.showPayload) {
-		process.stdout.write(
-			JSON.stringify(payloads.length === 1 ? payloads[0] : payloads, null, 2) + '\n'
-		);
+		process.stdout.write(JSON.stringify(payloads.length === 1 ? payloads[0] : payloads, null, 2) + '\n');
 		return;
 	}
 
@@ -152,7 +200,7 @@ async function main() {
 	for (let i = 0; i < payloads.length; i++) {
 		let n;
 		try {
-			n = await push(opts.endpoint, opts.token, payloads[i]);
+			n = await push(opts.endpoint, token, payloads[i]);
 		} catch (err) {
 			// Each batch commits independently server-side via an idempotent upsert, so a mid-run
 			// failure never corrupts data and re-running is safe (duplicates are ignored).
@@ -171,7 +219,23 @@ async function main() {
 	);
 }
 
-main().catch((err) => {
-	process.stderr.write(`goei-sync: ${err && err.message ? err.message : err}\n`);
-	process.exit(1);
-});
+async function main() {
+	const opts = parseArgs(process.argv.slice(2));
+	if (opts.help) {
+		process.stdout.write(HELP);
+		return;
+	}
+	const wantsSync = routesToSync(opts);
+	assertFlagCompat(opts, wantsSync);
+	if (wantsSync) await runSync(opts);
+	else await runReport(opts);
+}
+
+if (require.main === module) {
+	main().catch((err) => {
+		process.stderr.write(`goei-sync: ${err && err.message ? err.message : err}\n`);
+		process.exit(1);
+	});
+}
+
+module.exports = { parseArgs, resolveSince, routesToSync, assertFlagCompat };

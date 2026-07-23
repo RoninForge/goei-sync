@@ -1,13 +1,19 @@
 {
   "name": "goei-sync",
-  "version": "0.1.0",
-  "description": "Push your local Claude Code usage (via ccusage) to Goei, the hosted team cost dashboard. Zero API keys, daily rollups only, nothing in your request path.",
+  "version": "0.2.0",
+  "description": "See your Claude Code spend broken down by git branch, on your machine, no account. Then optionally sync daily rollups to Goei, the hosted team cost dashboard. Zero API keys, nothing in your request path.",
   "bin": {
     "goei-sync": "bin/goei-sync.js"
+  },
+  "scripts": {
+    "test": "node --test"
   },
   "type": "commonjs",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "ai-price-index": "^1.0.10"
   },
   "files": [
     "bin/",
