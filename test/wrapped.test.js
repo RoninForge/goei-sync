@@ -105,9 +105,12 @@ function displayWidth(s) {
 	let w = 0;
 	for (const ch of s) {
 		if (/\p{M}/u.test(ch)) continue;
+		if (/\p{Emoji_Presentation}/u.test(ch)) {
+			w += 2;
+			continue;
+		}
 		const cp = ch.codePointAt(0);
 		const wide =
-			cp >= 0x1f000 ||
 			(cp >= 0x1100 && cp <= 0x115f) ||
 			(cp >= 0x2e80 && cp <= 0x303e) ||
 			(cp >= 0x3041 && cp <= 0x33ff) ||
@@ -127,7 +130,9 @@ test('renders a fixed-width card for CJK, emoji, and NFD accented names, no drif
 		rec({ date: '2026-07-01', project: '中文项目', branch: '功能', tokens: { input: 5_000_000, cache_read: 2_000_000 } }),
 		rec({ date: '2026-07-02', project: 'rockets', branch: '\u{1F680}'.repeat(40), tokens: { input: 1_000_000 } }),
 		// "cafe" + combining acute x8 + "-app": how macOS stores an accented dir name (NFD form).
-		rec({ date: '2026-07-03', project: 'cafe' + acute.repeat(8) + '-app', branch: 'f' + acute + 'eat', tokens: { input: 800_000 } })
+		rec({ date: '2026-07-03', project: 'cafe' + acute.repeat(8) + '-app', branch: 'f' + acute + 'eat', tokens: { input: 800_000 } }),
+		// BMP dingbat emoji render two columns wide, and a branch name can contain them.
+		rec({ date: '2026-07-04', project: 'checklist', branch: '✅'.repeat(10), tokens: { input: 600_000 } })
 	];
 	const { text } = await buildWrapped(recs, { priceFn: pricer() });
 	const framed = text.split('\n').filter((l) => /^[┌│├└]/.test(l));

@@ -1,6 +1,6 @@
 {
   "name": "goei-sync",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Track your Claude Code spend by git branch in one command, no account. Print a shareable Claude Code Wrapped card, or sync daily rollups to Goei, the hosted team cost dashboard. Zero API keys, nothing in your request path.",
   "bin": {
     "goei-sync": "bin/goei-sync.js"
