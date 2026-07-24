@@ -34,6 +34,32 @@ test('the report command with a window stays local', () => {
 	assert.equal(routesToSync(opts), false);
 });
 
+test('the wrapped command with a window stays local', () => {
+	const opts = parseArgs(['wrapped', '--days', '7']);
+	assert.equal(opts.command, 'wrapped');
+	assert.equal(opts.days, 7);
+	assert.equal(routesToSync(opts), false);
+});
+
+test('a bare wrapped invocation stays local even when GOEI_DEVICE_TOKEN is set', () => {
+	const prev = process.env.GOEI_DEVICE_TOKEN;
+	process.env.GOEI_DEVICE_TOKEN = 'goei_dt_' + 'a'.repeat(32);
+	try {
+		assert.equal(routesToSync(parseArgs(['wrapped'])), false);
+	} finally {
+		if (prev === undefined) delete process.env.GOEI_DEVICE_TOKEN;
+		else process.env.GOEI_DEVICE_TOKEN = prev;
+	}
+});
+
+test('wrapped refuses every sync-only flag and never routes to the network', () => {
+	for (const flag of [['--token', 'goei_dt_x'], ['--dry-run'], ['--show-payload']]) {
+		const opts = parseArgs(['wrapped', ...flag]);
+		assert.equal(routesToSync(opts), false);
+		assert.throws(() => assertFlagCompat(opts, routesToSync(opts)), /wrapped is local-only/);
+	}
+});
+
 test('--dry-run and --show-payload route to sync', () => {
 	assert.equal(routesToSync(parseArgs(['--dry-run'])), true);
 	assert.equal(routesToSync(parseArgs(['--show-payload'])), true);

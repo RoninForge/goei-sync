@@ -7,11 +7,13 @@ const { toSpendRecords, buildPayloads, totalTokens } = require('../lib/payload')
 const { DEFAULT_ENDPOINT, validToken, push } = require('../lib/ingest');
 const { scan } = require('../lib/scan');
 const { buildReport } = require('../lib/report');
+const { buildWrapped, renderCard } = require('../lib/wrapped');
 
 const HELP = `goei-sync - see and sync your Claude Code costs
 
 Usage:
   npx goei-sync                       show local spend by git branch (no account)
+  npx goei-sync wrapped               one shareable card of your Claude Code usage
   npx goei-sync --token goei_dt_xxx   sync daily rollups to your Goei dashboard
 
 With no arguments, goei-sync prices the session logs Claude Code already writes
@@ -22,6 +24,7 @@ re-priced at the rates that were live then.
 
 Commands:
   report            (default) print local spend by git branch; no token needed
+  wrapped           print one shareable card summarising your usage; no token
   sync              push daily rollups to Goei; uses --token or GOEI_DEVICE_TOKEN
 
 Options:
@@ -29,7 +32,7 @@ Options:
                     read by the sync command)
   --days <n>        limit to the last n days
   --since <date>    limit to YYYY-MM-DD forward (overrides --days)
-  --json            print the report as JSON instead of a table (report only)
+  --json            print report or wrapped as JSON instead of a table (local)
   --machine <id>    machine label for dedupe on sync (default: this host's name)
   --endpoint <url>  ingest endpoint (default: ${DEFAULT_ENDPOINT})
   --show-payload    print the exact JSON that sync would send, then exit
@@ -45,7 +48,7 @@ https://github.com/RoninForge/budgetclaw
 function parseArgs(argv) {
 	let args = argv;
 	let command = '';
-	if (args[0] === 'report' || args[0] === 'sync') {
+	if (args[0] === 'report' || args[0] === 'wrapped' || args[0] === 'sync') {
 		command = args[0];
 		args = args.slice(1);
 	}
@@ -94,7 +97,9 @@ function parseArgs(argv) {
 				break;
 			case '--days': {
 				const v = Number(next());
-				if (!Number.isInteger(v) || v <= 0) throw new Error('--days must be a positive integer.');
+				// Upper bound keeps the since-date arithmetic in resolveSince well inside the valid
+				// Date range, so an absurd --days yields the friendly error here, not a raw RangeError.
+				if (!Number.isInteger(v) || v <= 0 || v > 36500) throw new Error('--days must be a positive integer (max 36500).');
 				opts.days = v;
 				break;
 			}
@@ -112,17 +117,17 @@ function parseArgs(argv) {
 }
 
 // Sync is chosen only by an explicit --token flag, the `sync` word, or a sync-only
-// flag; never by the environment alone, so the bare local report stays local.
+// flag; never by the environment alone, so the bare local report stays local. The
+// local-only commands (report, wrapped) never route to sync even with a token flag.
 function routesToSync(opts) {
-	return (
-		opts.command === 'sync' ||
-		(opts.command !== 'report' && (opts.tokenFlag || opts.showPayload || opts.dryRun))
-	);
+	const localOnly = opts.command === 'report' || opts.command === 'wrapped';
+	return opts.command === 'sync' || (!localOnly && (opts.tokenFlag || opts.showPayload || opts.dryRun));
 }
 
 function assertFlagCompat(opts, wantsSync) {
-	if (opts.command === 'report' && (opts.tokenFlag || opts.showPayload || opts.dryRun)) {
-		throw new Error('report is local-only and takes no sync flags (--token, --show-payload, --dry-run).');
+	const localOnly = opts.command === 'report' || opts.command === 'wrapped';
+	if (localOnly && (opts.tokenFlag || opts.showPayload || opts.dryRun)) {
+		throw new Error(`${opts.command} is local-only and takes no sync flags (--token, --show-payload, --dry-run).`);
 	}
 	if (wantsSync && opts.json) {
 		throw new Error('--json applies to the local report only, not sync.');
@@ -144,6 +149,22 @@ async function runReport(opts) {
 	const { data, text } = await buildReport(records);
 	if (opts.json) process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 	else process.stdout.write(text);
+}
+
+// The shareable card: same local records, rendered as one screenshot-ready summary.
+// Colour only when writing to a terminal and NO_COLOR is unset, so a pipe or a
+// redirect captures clean text.
+async function runWrapped(opts) {
+	const records = await scan({ since: resolveSince(opts) });
+	const { data, text } = await buildWrapped(records);
+	if (opts.json) {
+		process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+		return;
+	}
+	// NO_COLOR disables colour whenever the variable is present, empty or not (no-color.org).
+	// The color-off card is already rendered by buildWrapped, so reuse it instead of re-rendering.
+	const color = !!process.stdout.isTTY && !('NO_COLOR' in process.env);
+	process.stdout.write(color ? renderCard(data, { color: true }) : text);
 }
 
 // The existing push path: ccusage -> daily rollups -> Goei ingest.
@@ -227,7 +248,8 @@ async function main() {
 	}
 	const wantsSync = routesToSync(opts);
 	assertFlagCompat(opts, wantsSync);
-	if (wantsSync) await runSync(opts);
+	if (opts.command === 'wrapped') await runWrapped(opts);
+	else if (wantsSync) await runSync(opts);
 	else await runReport(opts);
 }
 

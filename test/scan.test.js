@@ -157,6 +157,32 @@ test('a JSON null line skips itself without discarding the rest of the file', as
 	assert.equal(recs.length, 1);
 });
 
+test('strips control bytes from project and branch so a rendered card cannot be broken', async () => {
+	const root = tmpRoot();
+	writeLog(root, 'p', [assistant({ cwd: '/home/u/dev/ac\x1b[31mme', branch: 'ma\x1b[0min' })]);
+	const recs = await scan({ root });
+	assert.equal(recs[0].project, 'ac[31mme');
+	assert.equal(recs[0].branch, 'ma[0min');
+	assert.ok(!/[\x00-\x1f\x7f]/.test(recs[0].project + recs[0].branch));
+});
+
+test('a project or branch made only of control bytes falls back to a placeholder', async () => {
+	const root = tmpRoot();
+	writeLog(root, 'p', [assistant({ cwd: '/home/u/dev/\x01\x02', branch: '\x1b' })]);
+	const recs = await scan({ root });
+	assert.equal(recs[0].project, '(unknown)');
+	assert.equal(recs[0].branch, '(no branch)');
+});
+
+test('strips BiDi override and zero-width format characters from names', async () => {
+	const root = tmpRoot();
+	const rlo = String.fromCodePoint(0x202e), zwsp = String.fromCodePoint(0x200b), bom = String.fromCodePoint(0xfeff);
+	writeLog(root, 'p', [assistant({ cwd: '/home/u/dev/nor' + rlo + 'mal', branch: 'a' + zwsp + 'b' + bom })]);
+	const recs = await scan({ root });
+	assert.equal(recs[0].project, 'normal');
+	assert.equal(recs[0].branch, 'ab');
+});
+
 test('resolves the projects root from CLAUDE_CONFIG_DIR when set', () => {
 	const { projectsRoot } = require('../lib/scan');
 	const prev = process.env.CLAUDE_CONFIG_DIR;
