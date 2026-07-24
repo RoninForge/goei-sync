@@ -98,11 +98,13 @@ test('caching savings stays a finite number when a record omits the cache-write 
 	assert.equal(data.cacheSavedUsd, 2.7);
 });
 
-// Independent display-width measure (numeric ranges, decoupled from the module) used to
-// prove the box borders stay aligned for wide CJK and astral emoji names.
+// Independent display-width measure (decoupled from the module) used to prove the box borders
+// stay aligned. Combining marks are zero-width (compose onto the base, as real terminals render
+// them); the numeric ranges cover East Asian wide / full-width; astral pictographs are width 2.
 function displayWidth(s) {
 	let w = 0;
 	for (const ch of s) {
+		if (/\p{M}/u.test(ch)) continue;
 		const cp = ch.codePointAt(0);
 		const wide =
 			cp >= 0x1f000 ||
@@ -119,14 +121,26 @@ function displayWidth(s) {
 	return w;
 }
 
-test('renders a fixed-width card for CJK and emoji names, no border drift, no mojibake', async () => {
+test('renders a fixed-width card for CJK, emoji, and NFD accented names, no drift, no mojibake', async () => {
+	const acute = String.fromCodePoint(0x0301); // combining acute accent (zero terminal columns)
 	const recs = [
 		rec({ date: '2026-07-01', project: '中文项目', branch: '功能', tokens: { input: 5_000_000, cache_read: 2_000_000 } }),
-		rec({ date: '2026-07-02', project: 'rockets', branch: '\u{1F680}'.repeat(40), tokens: { input: 1_000_000 } })
+		rec({ date: '2026-07-02', project: 'rockets', branch: '\u{1F680}'.repeat(40), tokens: { input: 1_000_000 } }),
+		// "cafe" + combining acute x8 + "-app": how macOS stores an accented dir name (NFD form).
+		rec({ date: '2026-07-03', project: 'cafe' + acute.repeat(8) + '-app', branch: 'f' + acute + 'eat', tokens: { input: 800_000 } })
 	];
 	const { text } = await buildWrapped(recs, { priceFn: pricer() });
 	const framed = text.split('\n').filter((l) => /^[┌│├└]/.test(l));
 	assert.ok(framed.length > 0);
 	assert.equal(new Set(framed.map(displayWidth)).size, 1);
 	assert.ok(!/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text));
+});
+
+test('a non-finite price never renders a $NaN card', async () => {
+	const nanPricer = () => ({ usd: NaN, modelKnown: true });
+	const recs = [rec({ date: '2026-07-01', project: 'p', branch: 'b', tokens: { input: 1000 } })];
+	const { data, text } = await buildWrapped(recs, { priceFn: nanPricer });
+	assert.ok(Number.isFinite(data.total.usd));
+	assert.ok(Number.isFinite(data.cacheSavedUsd));
+	assert.ok(!text.includes('NaN'));
 });
