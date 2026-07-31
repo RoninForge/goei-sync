@@ -62,7 +62,7 @@ The "prompt caching saved" line is the honest net figure: what those cached toke
 
 ## Roll it up across your team
 
-One machine is one machine. To combine every developer and every machine into one deduplicated rollup, and to re-price 12 months of history at the rates that were live in each past month, sync to [Goei](https://roninforge.org/goei):
+One machine is one machine. To combine every developer and every machine into one deduplicated rollup, and to re-price 12 months of history at the rates that were live in each past month, sync to [Goei](https://roninforge.org/goei/):
 
 ```bash
 npx goei-sync --token goei_dt_your_device_token
@@ -97,17 +97,14 @@ sync              push daily rollups to Goei; uses --token or GOEI_DEVICE_TOKEN
 
 `report` and `wrapped` are local-only and refuse any sync flag, so they can never send anything. Run `npx goei-sync sync --show-payload` to read the exact request body before you ever send a token. Every field it contains is a token count, a date, or a model name. There are no prompts and no keys in it.
 
-## goei-sync vs ccusage
-
-Both read the same local Claude Code logs with no API key. `ccusage` gives you daily, monthly, and per-session totals. goei-sync adds the two things it does not: a per-git-branch breakdown of where your spend actually went, and a one-command push to a shared team dashboard. Use goei-sync when you want to know which branch or project burned the budget, or when more than one developer needs to see the total. A side-by-side breakdown lives at [Goei vs ccusage](https://roninforge.org/goei/vs-ccusage/).
-
-## goei-sync vs budgetclaw
-
-Both feed the same Goei dashboard from the same local logs, with no API key. On a machine that syncs, run one of the two, not both: a day synced by both would be counted twice. [budgetclaw](https://github.com/RoninForge/budgetclaw) adds always-on background tracking with per-project and per-git-branch attribution, plus hard spend caps that can stop a runaway agent before the bill lands. Use goei-sync for a quick local look, a shareable card, and a dependency-free push; use budgetclaw when you want continuous tracking and enforcement. If you want to stop a runaway agent, not just measure it, start with the tutorial [How to set a hard spend cap on Claude Code](https://roninforge.org/tutorials/how-to-set-a-hard-spend-cap-on-claude-code/).
-
-## Not a proxy
+## Which tool should I run?
 
 goei-sync is a reporter, not a proxy. It does not sit between your editor and any AI provider, and it touches no API traffic, prompts, responses, or keys. It reads the usage Claude Code already wrote to disk.
+
+**On a machine that syncs, run either goei-sync or budgetclaw, not both.** A day pushed by both is counted twice. Which one to pick, and how goei-sync compares to ccusage, is written up on the domain:
+
+- [goei-sync or budgetclaw?](https://roninforge.org/goei/) - the choice, and why running both double-counts
+- [Goei vs ccusage](https://roninforge.org/goei/vs-ccusage/) - the side-by-side breakdown
 
 ## Requirements
 
@@ -115,4 +112,13 @@ Node 18 or newer.
 
 ## License
 
-MIT. Part of [RoninForge](https://roninforge.org), which builds honest, local-first cost tools for developers working with AI coding assistants. More on tracking and capping Claude Code spend: [Goei](https://roninforge.org/goei), [budgetclaw](https://roninforge.org/budgetclaw), and the [Claude Code cost tutorials](https://roninforge.org/tutorials/how-to-track-claude-code-spend-over-time/).
+MIT. Part of [RoninForge.org](https://roninforge.org).
+
+## Docs
+
+- [How to track your Claude Code spend over time](https://roninforge.org/tutorials/how-to-track-claude-code-spend-over-time/)
+- [How to set a hard spend cap on Claude Code](https://roninforge.org/tutorials/how-to-set-a-hard-spend-cap-on-claude-code/)
+- [Track Claude Code spend across a team](https://roninforge.org/goei/track-claude-code-spend-across-team/)
+- [Is your Claude Max plan worth it?](https://roninforge.org/goei/is-claude-max-worth-it/)
+- [Goei, the hosted team dashboard](https://roninforge.org/goei/)
+- [budgetclaw, for always-on tracking and hard caps](https://roninforge.org/budgetclaw/)
