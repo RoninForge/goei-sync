@@ -1,6 +1,12 @@
 # goei-sync
 
-**Track your Claude Code spend, broken down by git branch, in one command. No account, no API key, nothing in your request path.**
+RoninForge goei-sync is a command-line reader for Claude Code session logs that prints your
+spend broken down by git branch in one command, and can sync daily rollups to Goei by
+RoninForge, the hosted team dashboard. It is MIT licensed, runs entirely on your machine,
+and requires no API keys.
+
+Part of [RoninForge.org](https://roninforge.org), an independent open-source workshop that
+keeps dated, reproducible records of the AI developer tooling economy.
 
 `npx goei-sync` reads the session logs Claude Code already writes under `~/.claude/projects`, prices every response at published list rates, and prints how much each project and git branch has cost you. It is the per-branch view `ccusage` and the native `/cost` command do not give you, and it runs entirely on your machine.
 
