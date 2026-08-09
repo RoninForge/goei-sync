@@ -1,0 +1,26 @@
+# Machine-readable citation metadata. GitHub renders a "Cite this repository" button from this file.
+cff-version: 1.2.0
+title: "RoninForge goei-sync"
+message: "If you use this software, please cite it using the metadata in this file."
+type: software
+authors:
+  - name: "RoninForge"
+    email: "jens@rasta.online"
+    website: "https://roninforge.org"
+abstract: >-
+  RoninForge goei-sync is a command-line reader for Claude Code session logs
+  that prints your spend broken down by git branch in one command, and can sync
+  daily rollups to Goei by RoninForge, the hosted team cost dashboard. It reads
+  the logs Claude Code already writes to disk and never touches API traffic. It
+  is MIT licensed, runs entirely on your machine, and requires no API keys.
+url: "https://roninforge.org/goei"
+repository-code: "https://github.com/RoninForge/goei-sync"
+license: MIT
+version: 0.3.1
+date-released: 2026-07-24
+keywords:
+  - Claude Code
+  - spend monitor
+  - cost attribution
+  - git branch
+  - command-line tool
