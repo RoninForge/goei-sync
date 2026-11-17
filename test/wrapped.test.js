@@ -149,3 +149,13 @@ test('a non-finite price never renders a $NaN card', async () => {
 	assert.ok(Number.isFinite(data.cacheSavedUsd));
 	assert.ok(!text.includes('NaN'));
 });
+
+test('default pricer tiers Haiku 5.5 per request and the no-cache counterfactual uses the same tier', async () => {
+	const tokens = (cache_read) => ({ input: 0, output: 1_000_000, cache_read });
+	const at = await buildWrapped([rec({ date: '2026-10-15', model: 'claude-haiku-5-5', project: 'a', branch: 'main', tokens: tokens(100_000) })]);
+	assert.strictEqual(at.data.total.usd, 0.5); // 100k * $0.01 + 1M * $0.50
+	assert.strictEqual(at.data.cacheSavedUsd, 0.01); // 100k * ($0.10 - $0.01)
+	const over = await buildWrapped([rec({ date: '2026-10-15', model: 'claude-haiku-5-5', project: 'a', branch: 'main', tokens: tokens(101_000) })]);
+	assert.strictEqual(over.data.total.usd, 2.51); // 101k * $0.05 + 1M * $2.50
+	assert.strictEqual(over.data.cacheSavedUsd, 0.05); // 101k * ($0.50 - $0.05)
+});
