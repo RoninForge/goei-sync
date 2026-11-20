@@ -16,8 +16,8 @@ abstract: >-
 url: "https://roninforge.org/goei"
 repository-code: "https://github.com/RoninForge/goei-sync"
 license: MIT
-version: 0.3.1
-date-released: 2026-07-24
+version: 0.3.2
+date-released: 2026-11-17
 keywords:
   - Claude Code
   - spend monitor

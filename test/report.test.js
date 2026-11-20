@@ -87,3 +87,28 @@ test('empty input yields empty data and a friendly, non-crashing message', async
 	assert.match(data.disclaimer, /Not your provider bill/);
 	assert.match(text, /No Claude Code usage found/);
 });
+
+// Prompt-length tier: each record is one request, so tiers apply per record, never to a sum.
+test('prices each record on its own, so small requests summing past a tier threshold stay base', async () => {
+	const tiered = (t) => {
+		const prompt = t.input + t.cache_read + t.cache_write_5m + t.cache_write_1h;
+		return { usd: (prompt > 100_000 ? 5 : 1) * tokenTotal(t) / 1e6, modelKnown: true };
+	};
+	const { data } = await buildReport(
+		[rec('a', 'main', 'claude-haiku-5-5', 60_000), rec('a', 'main', 'claude-haiku-5-5', 60_000)],
+		{ priceFn: tiered }
+	);
+	assert.strictEqual(data.total.usd, 0.12);
+});
+
+function haikuRec(input) {
+	return { date: '2026-10-15', model: 'claude-haiku-5-5', project: 'a', branch: 'main',
+		tokens: { input, output: 1_000_000, cache_read: 0, cache_write_5m: 0, cache_write_1h: 0 } };
+}
+
+test('default pricer bills a Haiku 5.5 request at tier2 only when the prompt exceeds 100k', async () => {
+	const at = await buildReport([haikuRec(100_000)]);
+	assert.strictEqual(at.data.total.usd, 0.51); // 100k * $0.10 + 1M * $0.50
+	const over = await buildReport([haikuRec(100_001)]);
+	assert.strictEqual(over.data.total.usd, 2.55); // 100,001 * $0.50 + 1M * $2.50
+});
